@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.rundeck.api.RundeckClientTest" time="17.073" tests="98" errors="0" skipped="0" failures="0">
+  <properties>
+    <property name="java.runtime.name" value="OpenJDK Runtime Environment"/>
+    <property name="sun.boot.library.path" value="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/amd64"/>
+    <property name="java.vm.version" value="25.131-b11"/>
+    <property name="java.vm.vendor" value="Oracle Corporation"/>
+    <property name="java.vendor.url" value="http://java.oracle.com/"/>
+    <property name="path.separator" value=":"/>
+    <property name="guice.disable.misplaced.annotation.check" value="true"/>
+    <property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/>
+    <property name="file.encoding.pkg" value="sun.io"/>
+    <property name="user.country" value="US"/>
+    <property name="sun.java.launcher" value="SUN_STANDARD"/>
+    <property name="sun.os.patch.level" value="unknown"/>
+    <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
+    <property name="user.dir" value="/home/ronald/rundeck-plugins/rundeck-api-java-client"/>
+    <property name="java.runtime.version" value="1.8.0_131-b11"/>
+    <property name="java.awt.graphicsenv" value="sun.awt.X11GraphicsEnvironment"/>
+    <property name="java.endorsed.dirs" value="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/endorsed"/>
+    <property name="os.arch" value="amd64"/>
+    <property name="java.io.tmpdir" value="/tmp"/>
+    <property name="line.separator" value="&#10;"/>
+    <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
+    <property name="os.name" value="Linux"/>
+    <property name="classworlds.conf" value="/usr/share/maven/bin/m2.conf"/>
+    <property name="sun.jnu.encoding" value="UTF-8"/>
+    <property name="java.library.path" value="/usr/java/packages/lib/amd64:/usr/lib64:/lib64:/lib:/usr/lib"/>
+    <property name="java.specification.name" value="Java Platform API Specification"/>
+    <property name="java.class.version" value="52.0"/>
+    <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
+    <property name="os.version" value="3.10.0-514.6.2.el7.x86_64"/>
+    <property name="user.home" value="/home/ronald"/>
+    <property name="user.timezone" value="Europe/London"/>
+    <property name="java.awt.printerjob" value="sun.print.PSPrinterJob"/>
+    <property name="file.encoding" value="UTF-8"/>
+    <property name="java.specification.version" value="1.8"/>
+    <property name="user.name" value="ronald"/>
+    <property name="java.class.path" value="/usr/share/maven/boot/plexus-classworlds.jar"/>
+    <property name="java.vm.specification.version" value="1.8"/>
+    <property name="sun.arch.data.model" value="64"/>
+    <property name="java.home" value="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre"/>
+    <property name="sun.java.command" value="org.codehaus.plexus.classworlds.launcher.Launcher package"/>
+    <property name="java.specification.vendor" value="Oracle Corporation"/>
+    <property name="user.language" value="en"/>
+    <property name="awt.toolkit" value="sun.awt.X11.XToolkit"/>
+    <property name="java.vm.info" value="mixed mode"/>
+    <property name="java.version" value="1.8.0_131"/>
+    <property name="java.ext.dirs" value="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/ext:/usr/java/packages/lib/ext"/>
+    <property name="sun.boot.class.path" value="/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/resources.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/rt.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/sunrsasign.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/jsse.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/jce.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/charsets.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/lib/jfr.jar:/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.131-2.b11.el7_3.x86_64/jre/classes"/>
+    <property name="java.vendor" value="Oracle Corporation"/>
+    <property name="maven.home" value="/usr/share/maven"/>
+    <property name="file.separator" value="/"/>
+    <property name="java.vendor.url.bug" value="http://bugreport.sun.com/bugreport/"/>
+    <property name="sun.cpu.endian" value="little"/>
+    <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
+    <property name="sun.cpu.isalist" value=""/>
+  </properties>
+  <testcase name="importJobsUUIDParamPreserveV9" classname="org.rundeck.api.RundeckClientTest" time="1.887"/>
+  <testcase name="getHistoryJoblist" classname="org.rundeck.api.RundeckClientTest" time="0.198"/>
+  <testcase name="getExecutionsPaging" classname="org.rundeck.api.RundeckClientTest" time="0.314"/>
+  <testcase name="listKeyDirectoryRoot" classname="org.rundeck.api.RundeckClientTest" time="0.18"/>
+  <testcase name="deleteExecutionsSuccess" classname="org.rundeck.api.RundeckClientTest" time="0.156"/>
+  <testcase name="getHistoryExcludeJoblist" classname="org.rundeck.api.RundeckClientTest" time="0.158"/>
+  <testcase name="deleteExecutionSuccess" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="triggerAdhocScript_v11_buggy" classname="org.rundeck.api.RundeckClientTest" time="0.178"/>
+  <testcase name="triggerAdhocScript" classname="org.rundeck.api.RundeckClientTest" time="0.193"/>
+  <testcase name="storeProjectFileInvalidName" classname="org.rundeck.api.RundeckClientTest" time="0"/>
+  <testcase name="generateApiToken" classname="org.rundeck.api.RundeckClientTest" time="0.165"/>
+  <testcase name="getProject_v10" classname="org.rundeck.api.RundeckClientTest" time="0.163"/>
+  <testcase name="getProject_v11" classname="org.rundeck.api.RundeckClientTest" time="0.176"/>
+  <testcase name="runningExecutionsV8" classname="org.rundeck.api.RundeckClientTest" time="0.191"/>
+  <testcase name="runningExecutionsV9" classname="org.rundeck.api.RundeckClientTest" time="0.197"/>
+  <testcase name="executionState" classname="org.rundeck.api.RundeckClientTest" time="0.183"/>
+  <testcase name="readProjectFile" classname="org.rundeck.api.RundeckClientTest" time="0.163"/>
+  <testcase name="deleteProjectFileMotd" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="readProjectFileInvalidName" classname="org.rundeck.api.RundeckClientTest" time="0"/>
+  <testcase name="triggerAdhocCommand_v11" classname="org.rundeck.api.RundeckClientTest" time="0.178"/>
+  <testcase name="bulkDelete" classname="org.rundeck.api.RundeckClientTest" time="0.151"/>
+  <testcase name="importJobsContextProject" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="getApiToken" classname="org.rundeck.api.RundeckClientTest" time="0.185"/>
+  <testcase name="deleteJobNotFound" classname="org.rundeck.api.RundeckClientTest" time="0.153"/>
+  <testcase name="listApiTokens" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="getExecution" classname="org.rundeck.api.RundeckClientTest" time="0.135"/>
+  <testcase name="deleteApiToken" classname="org.rundeck.api.RundeckClientTest" time="0.146"/>
+  <testcase name="deleteAllJobExecutionsSuccess" classname="org.rundeck.api.RundeckClientTest" time="0.156"/>
+  <testcase name="apiVersionDefaultLatest" classname="org.rundeck.api.RundeckClientTest" time="0"/>
+  <testcase name="deleteExecutionNullInput" classname="org.rundeck.api.RundeckClientTest" time="0"/>
+  <testcase name="deleteExecutionFailure" classname="org.rundeck.api.RundeckClientTest" time="0.145"/>
+  <testcase name="storeKey_private" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="triggerAdhocScriptInpterpreter" classname="org.rundeck.api.RundeckClientTest" time="0.203"/>
+  <testcase name="triggerAdhocScript_v11" classname="org.rundeck.api.RundeckClientTest" time="0.17"/>
+  <testcase name="abortExecutionAsUser" classname="org.rundeck.api.RundeckClientTest" time="0.188"/>
+  <testcase name="setProjectConfigKeyed" classname="org.rundeck.api.RundeckClientTest" time="0.142"/>
+  <testcase name="executionOutputStateOnly" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="storeKey_public" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="triggerJobAsUserUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.143"/>
+  <testcase name="deleteProject" classname="org.rundeck.api.RundeckClientTest" time="0.151"/>
+  <testcase name="importJobsProjectParamV7" classname="org.rundeck.api.RundeckClientTest" time="0.16"/>
+  <testcase name="storeProjectFileMotd" classname="org.rundeck.api.RundeckClientTest" time="0.24"/>
+  <testcase name="getExecution_v11_buggy" classname="org.rundeck.api.RundeckClientTest" time="0.182"/>
+  <testcase name="executionOutputBasic" classname="org.rundeck.api.RundeckClientTest" time="0.184"/>
+  <testcase name="executionOutputState" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="setProjectConfig" classname="org.rundeck.api.RundeckClientTest" time="0.158"/>
+  <testcase name="executionOutputForNodeAndStep" classname="org.rundeck.api.RundeckClientTest" time="0.142"/>
+  <testcase name="deleteJob" classname="org.rundeck.api.RundeckClientTest" time="0.137"/>
+  <testcase name="deleteKey" classname="org.rundeck.api.RundeckClientTest" time="0.189"/>
+  <testcase name="getHistoryUser" classname="org.rundeck.api.RundeckClientTest" time="0.154"/>
+  <testcase name="getExecution_v11" classname="org.rundeck.api.RundeckClientTest" time="0.152"/>
+  <testcase name="getExecutionsV11" classname="org.rundeck.api.RundeckClientTest" time="0.363"/>
+  <testcase name="readProjectFileProjectDNE" classname="org.rundeck.api.RundeckClientTest" time="0.163"/>
+  <testcase name="deleteProjectFileProjectDNE" classname="org.rundeck.api.RundeckClientTest" time="0.151"/>
+  <testcase name="getKey_private" classname="org.rundeck.api.RundeckClientTest" time="0.15"/>
+  <testcase name="getKey_public" classname="org.rundeck.api.RundeckClientTest" time="0.186"/>
+  <testcase name="getExecutions" classname="org.rundeck.api.RundeckClientTest" time="0.31"/>
+  <testcase name="importJobsNoProject" classname="org.rundeck.api.RundeckClientTest" time="0.133"/>
+  <testcase name="deleteProjectFileReadme" classname="org.rundeck.api.RundeckClientTest" time="0.14"/>
+  <testcase name="triggerJobAsUser" classname="org.rundeck.api.RundeckClientTest" time="0.136"/>
+  <testcase name="triggerAdhocCommand_v11_buggy" classname="org.rundeck.api.RundeckClientTest" time="0.162"/>
+  <testcase name="bulkDeleteFailUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.135"/>
+  <testcase name="abortExecutionAsUserUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.137"/>
+  <testcase name="getKeyData_private" classname="org.rundeck.api.RundeckClientTest" time="0.151"/>
+  <testcase name="deleteProjectConfigKeyed" classname="org.rundeck.api.RundeckClientTest" time="0.138"/>
+  <testcase name="triggerAdhocCommandAsUserUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.13"/>
+  <testcase name="getKeyData_public" classname="org.rundeck.api.RundeckClientTest" time="0.136"/>
+  <testcase name="importJobsUUIDParamRemoveV9" classname="org.rundeck.api.RundeckClientTest" time="0.195"/>
+  <testcase name="triggerJobBasic_v11_patch" classname="org.rundeck.api.RundeckClientTest" time="0.193"/>
+  <testcase name="deleteAllJobExecutionsUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.131"/>
+  <testcase name="listApiTokens_user" classname="org.rundeck.api.RundeckClientTest" time="0.135"/>
+  <testcase name="triggerAdhocScriptAsUser" classname="org.rundeck.api.RundeckClientTest" time="0.151"/>
+  <testcase name="triggerJobBasic" classname="org.rundeck.api.RundeckClientTest" time="0.147"/>
+  <testcase name="importJobsProjectParam" classname="org.rundeck.api.RundeckClientTest" time="0.137"/>
+  <testcase name="bulkDeleteFailDNE" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="exportProject" classname="org.rundeck.api.RundeckClientTest" time="0.145"/>
+  <testcase name="importJobsContextProject_v13" classname="org.rundeck.api.RundeckClientTest" time="0.284"/>
+  <testcase name="triggerAdhocCommandAsUser" classname="org.rundeck.api.RundeckClientTest" time="0.154"/>
+  <testcase name="getProjectConfigKeyedDNE" classname="org.rundeck.api.RundeckClientTest" time="0.136"/>
+  <testcase name="triggerAdhocScriptAsUserUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.145"/>
+  <testcase name="getProjectConfigKeyed" classname="org.rundeck.api.RundeckClientTest" time="0.133"/>
+  <testcase name="importProjectSuccess" classname="org.rundeck.api.RundeckClientTest" time="0.172"/>
+  <testcase name="importJobsProjectParamOverride" classname="org.rundeck.api.RundeckClientTest" time="0.15"/>
+  <testcase name="getProjects" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="listKeyDirectory" classname="org.rundeck.api.RundeckClientTest" time="0.157"/>
+  <testcase name="storeProjectFileReadme" classname="org.rundeck.api.RundeckClientTest" time="0.199"/>
+  <testcase name="deleteProjectFileInvalidName" classname="org.rundeck.api.RundeckClientTest" time="0"/>
+  <testcase name="getProjectConfig" classname="org.rundeck.api.RundeckClientTest" time="0.264"/>
+  <testcase name="executionOutputForNode" classname="org.rundeck.api.RundeckClientTest" time="0.183"/>
+  <testcase name="executionOutputForStep" classname="org.rundeck.api.RundeckClientTest" time="0.146"/>
+  <testcase name="deleteExecutionsUnauthorized" classname="org.rundeck.api.RundeckClientTest" time="0.138"/>
+  <testcase name="triggerJobBasic_v11" classname="org.rundeck.api.RundeckClientTest" time="0.134"/>
+  <testcase name="importProjectFailure" classname="org.rundeck.api.RundeckClientTest" time="0.144"/>
+  <testcase name="abortExecution" classname="org.rundeck.api.RundeckClientTest" time="0.131"/>
+  <testcase name="deleteExecutionsMixed" classname="org.rundeck.api.RundeckClientTest" time="0.149"/>
+  <testcase name="createProject" classname="org.rundeck.api.RundeckClientTest" time="0.139"/>
+  <testcase name="getHistory" classname="org.rundeck.api.RundeckClientTest" time="0.13"/>
+  <testcase name="triggerAdhocCommand" classname="org.rundeck.api.RundeckClientTest" time="0.169"/>
+</testsuite>

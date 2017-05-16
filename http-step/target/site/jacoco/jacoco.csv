@@ -1,0 +1,7 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck.util,OAuthClient,5,361,3,19,1,80,3,19,0,11
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck.util,OAuthClient.GrantType,9,19,0,0,0,2,2,2,2,2
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck.util,OAuthClient.OAuthException,0,4,0,0,0,2,0,1,0,1
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck,HttpWorkflowStepPlugin,471,896,54,58,101,234,38,26,2,6
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck,HttpWorkflowStepPlugin.Reason,9,29,0,0,0,3,2,2,2,2
+edu.ohio.ais.rundeck:rundeck-http-plugin,edu.ohio.ais.rundeck,HttpWorkflowStepPlugin.new TrustStrategy() {...},8,0,0,0,2,0,2,0,2,0

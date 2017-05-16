@@ -1,0 +1,5 @@
+Allow all plugins with dependencies to be downloaded from the same repo
+
+gradle-deps refers to ~/.gradle
+m2-deps refers to ~/.m2
+

@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OAuthClient.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">edu.ohio.ais.rundeck:rundeck-http-plugin</a> &gt; <a href="index.source.html" class="el_package">edu.ohio.ais.rundeck.util</a> &gt; <span class="el_source">OAuthClient.java</span></div><h1>OAuthClient.java</h1><pre class="source lang-java linenums">package edu.ohio.ais.rundeck.util;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpHeaders;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.HttpResponseException;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Simple OAuth client to manage obtaining tokens and providing
+ * them for HTTP requests.
+ *
+ * Currently this only supports the CLIENT_CREDENTIALS grant type.
+ */
+public class OAuthClient {
+<span class="fc" id="L30">    private static final Log log = LogFactory.getLog(OAuthClient.class);</span>
+
+    public static final String JSON_CONTENT_TYPE = &quot;application/json&quot;;
+    public static final String FORM_CONTENT_TYPE = &quot;application/x-www-form-urlencoded&quot;;
+
+    public static final String FIELD_GRANT_TYPE = &quot;grant_type&quot;;
+    public static final String FIELD_ACCESS_TOKEN = &quot;access_token&quot;;
+
+<span class="fc" id="L38">    public static final Integer STATUS_SUCCESS = 200;</span>
+<span class="fc" id="L39">    public static final Integer STATUS_AUTHORIZATION_REQUIRED = 401;</span>
+
+<span class="pc" id="L41">    public enum GrantType {</span>
+<span class="fc" id="L42">        CLIENT_CREDENTIALS</span>
+    }
+
+    public static class OAuthException extends Exception {
+        public OAuthException(String message) {
+<span class="fc" id="L47">            super(message);</span>
+<span class="fc" id="L48">        }</span>
+    }
+
+    protected HttpClient httpClient;
+<span class="fc" id="L52">    protected ObjectMapper jsonParser = new ObjectMapper();</span>
+
+    String clientId;
+    String clientSecret;
+
+    GrantType grantType;
+
+    String tokenEndpoint;
+    String validateEndpoint;
+
+    String accessToken;
+
+    /**
+     * Try and build a reasonable error from the response. We try to
+     * use the optional &quot;error_description&quot; property if it's there, otherwise
+     * we stick with the &quot;error&quot; property, which is required. For
+     * implementations that don't comply with RFC 6749, we'll try to
+     * gracefully return just the status text.
+     *
+     * @param response The HTTP response.
+     * @return Error string
+     */
+    protected String buildError(HttpResponse response) {
+<span class="fc" id="L75">        String error = response.getStatusLine().getReasonPhrase();</span>
+
+        try {
+<span class="fc" id="L78">            JsonNode data = jsonParser.readTree(EntityUtils.toString(response.getEntity()));</span>
+
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">            if(!data.isArray()) {</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">                if (data.has(&quot;error_description&quot;)) {</span>
+<span class="fc" id="L82">                    error += &quot;: &quot; + data.get(&quot;error_description&quot;).asText();</span>
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">                } else if (data.has(&quot;error&quot;)) {</span>
+<span class="fc" id="L84">                    error += &quot;: &quot; + data.get(&quot;error&quot;).asText();</span>
+                }
+            }
+<span class="fc" id="L87">        } catch (IOException e) {</span>
+<span class="fc" id="L88">            log.error(e);</span>
+<span class="fc" id="L89">            error += &quot;: Unable to parse error response: &quot; + e.getMessage();</span>
+<span class="fc" id="L90">        }</span>
+
+<span class="fc" id="L92">        return error;</span>
+    }
+
+    /**
+     * Retrieve an access token with our client credentials.
+     *
+     * @throws IOException         When the HTTP request fails for some reason.
+     * @throws HttpResponseException When a non 200 or 401 status code is returned.
+     */
+    void doTokenRequest() throws HttpResponseException, OAuthException, IOException {
+<span class="fc" id="L102">        this.accessToken = null;</span>
+
+<span class="fc" id="L104">        log.debug(&quot;Requesting access token from &quot; + this.tokenEndpoint);</span>
+
+<span class="fc" id="L106">        List&lt;NameValuePair&gt; params = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L107">        params.add(new BasicNameValuePair(FIELD_GRANT_TYPE, this.grantType.name().toLowerCase()));</span>
+
+<span class="fc" id="L109">        HttpUriRequest request = RequestBuilder.create(&quot;POST&quot;)</span>
+<span class="fc" id="L110">                .setUri(this.tokenEndpoint)</span>
+<span class="fc" id="L111">                .setHeader(HttpHeaders.AUTHORIZATION, &quot;Basic &quot; + com.dtolabs.rundeck.core.utils.Base64.encode(this.clientId + &quot;:&quot; + this.clientSecret))</span>
+<span class="fc" id="L112">                .setHeader(HttpHeaders.ACCEPT, JSON_CONTENT_TYPE)</span>
+<span class="fc" id="L113">                .setHeader(HttpHeaders.CONTENT_TYPE, FORM_CONTENT_TYPE)</span>
+<span class="fc" id="L114">                .setEntity(new UrlEncodedFormEntity(params)).build();</span>
+
+<span class="fc" id="L116">        HttpResponse response = this.httpClient.execute(request);</span>
+
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if(response.getStatusLine().getStatusCode() == STATUS_SUCCESS) {</span>
+<span class="fc" id="L119">            JsonNode data = jsonParser.readTree(EntityUtils.toString(response.getEntity()));</span>
+<span class="fc" id="L120">            this.accessToken = data.get(FIELD_ACCESS_TOKEN).asText();</span>
+<span class="fc" id="L121">        } else {</span>
+<span class="fc" id="L122">            throw new HttpResponseException(response.getStatusLine().getStatusCode(), buildError(response));</span>
+        }
+
+<span class="fc" id="L125">        this.doTokenValidate(true);</span>
+<span class="fc" id="L126">    }</span>
+
+    /**
+     * Validate that the token we have is correct. This includes
+     * verifying that the client ID on the token is our client ID. The endpoint
+     * is called with a simple GET requests and expects a JSON response like
+     * the following:
+     *
+     * &lt;code&gt;
+     *     {
+     *         ...
+     *         &quot;clientId&quot;: ${Client ID Value}
+     *         ...
+     *     }
+     * &lt;/code&gt;
+     *
+     * @throws HttpResponseException When a status code other than 200 of 401 is returned
+     * @throws IOException
+     * @throws OAuthException When the Client ID on the token doesn't match our client ID.
+     */
+    void doTokenValidate() throws HttpResponseException, IOException, OAuthException {
+<span class="fc" id="L147">        this.doTokenValidate(false);</span>
+<span class="fc" id="L148">    }</span>
+
+    /**
+     * As in doTokenValidate(), validate that the token is correct. In this case we
+     * can specify that the token has _just_ been retrieved so that we don't try to
+     * retrieve it again if validate fails.
+     *
+     * @param newToken True if this is a brand new token and we shouldn't try to get
+     *                 a new on 401.a
+     * @throws HttpResponseException
+     * @throws IOException
+     * @throws OAuthException
+     */
+    void doTokenValidate(Boolean newToken) throws HttpResponseException, IOException, OAuthException {
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        if(this.accessToken == null) {</span>
+<span class="fc" id="L163">            this.doTokenRequest();</span>
+        }
+
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        if(this.validateEndpoint != null) {</span>
+<span class="fc" id="L167">            log.debug(&quot;Validating access token at &quot; + this.validateEndpoint);</span>
+
+<span class="fc" id="L169">            HttpUriRequest request = RequestBuilder.create(&quot;GET&quot;)</span>
+<span class="fc" id="L170">                    .setUri(this.validateEndpoint)</span>
+<span class="fc" id="L171">                    .setHeader(HttpHeaders.AUTHORIZATION, &quot;Bearer &quot; + this.accessToken)</span>
+<span class="fc" id="L172">                    .setHeader(HttpHeaders.ACCEPT, JSON_CONTENT_TYPE)</span>
+<span class="fc" id="L173">                    .build();</span>
+
+<span class="fc" id="L175">            HttpResponse response = this.httpClient.execute(request);</span>
+
+<span class="fc bfc" id="L177" title="All 2 branches covered.">            if (response.getStatusLine().getStatusCode() == STATUS_SUCCESS) {</span>
+<span class="fc" id="L178">                JsonNode data = jsonParser.readTree(EntityUtils.toString(response.getEntity()));</span>
+<span class="fc" id="L179">                String clientId = data.get(&quot;client&quot;).asText();</span>
+
+<span class="fc bfc" id="L181" title="All 2 branches covered.">                if (!this.clientId.equals(clientId)) {</span>
+<span class="fc" id="L182">                    throw new OAuthException(&quot;Token received for a client other than us.&quot;);</span>
+                }
+<span class="fc bfc" id="L184" title="All 2 branches covered.">            } else if (response.getStatusLine().getStatusCode() == STATUS_AUTHORIZATION_REQUIRED) {</span>
+<span class="fc" id="L185">                this.accessToken = null;</span>
+
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">                if(newToken) {</span>
+<span class="nc" id="L188">                    throw new OAuthException(&quot;Newly acquired token is still not valid.&quot;);</span>
+                } else {
+<span class="fc" id="L190">                    doTokenRequest();</span>
+                }
+            } else {
+<span class="fc" id="L193">                throw new HttpResponseException(response.getStatusLine().getStatusCode(), buildError(response));</span>
+            }
+<span class="fc" id="L195">        } else {</span>
+<span class="fc" id="L196">            log.debug(&quot;No validate endpoint exists, skipping validation.&quot;);</span>
+        }
+<span class="fc" id="L198">    }</span>
+
+    /**
+     * Initialize the OAuth client with the specified grant type.
+     *
+     * @param grantType
+     */
+<span class="fc" id="L205">    public OAuthClient(GrantType grantType) {</span>
+<span class="fc" id="L206">        this.httpClient = HttpClientBuilder.create()</span>
+<span class="fc" id="L207">                .disableAuthCaching()</span>
+<span class="fc" id="L208">                .disableAutomaticRetries()</span>
+<span class="fc" id="L209">                .build();</span>
+
+<span class="fc" id="L211">        this.grantType = grantType;</span>
+<span class="fc" id="L212">    }</span>
+
+    /**
+     * Set the credentials to use with this client.
+     *
+     * @param clientId
+     * @param clientSecret
+     */
+    public void setCredentials(String clientId, String clientSecret) {
+<span class="fc" id="L221">        log.trace(&quot;Setting credentials to &quot; + this.clientId + &quot;:&quot; + this.clientSecret);</span>
+
+<span class="fc" id="L223">        this.clientId = clientId;</span>
+<span class="fc" id="L224">        this.clientSecret = clientSecret;</span>
+<span class="fc" id="L225">    }</span>
+
+    /**
+     * Set the endpoint at which we can fetch an OAuth token.
+     *
+     * @param tokenEndpoint Complete URI to the token endpoint.
+     */
+    public void setTokenEndpoint(String tokenEndpoint) {
+<span class="fc" id="L233">        this.tokenEndpoint = tokenEndpoint;</span>
+<span class="fc" id="L234">    }</span>
+
+    /**
+     * Set the endpoint at which we can validate an OAuth token.
+     *
+     * @param validateEndpoint Complete URI to the validate endpoint.
+     */
+    public void setValidateEndpoint(String validateEndpoint) {
+<span class="fc" id="L242">        this.validateEndpoint = validateEndpoint;</span>
+<span class="fc" id="L243">    }</span>
+
+    /**
+     * Invalidate our current access token.
+     */
+    public void invalidateAccessToken() {
+<span class="fc" id="L249">        log.debug(&quot;Invalidating access token.&quot;);</span>
+<span class="fc" id="L250">        this.accessToken = null;</span>
+<span class="fc" id="L251">    }</span>
+
+    /**
+     * Get our access token. If we don't have a token, attempt to get one. Note that this
+     * is synchronous.
+     *
+     * @return The access token string.
+     *
+     * @throws HttpResponseException If an HTTP status code we don't handle is returned.
+     * @throws IOException
+     * @throws OAuthException If our token is not valid (or other OAuth protocol issues)
+     */
+    public String getAccessToken() throws HttpResponseException, IOException, OAuthException {
+<span class="fc bfc" id="L264" title="All 2 branches covered.">        if(this.accessToken == null) {</span>
+<span class="fc" id="L265">            this.doTokenValidate();</span>
+        }
+
+<span class="fc" id="L268">        return this.accessToken;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.eclemma.org/jacoco">JaCoCo</a> 0.7.7.201606060606</span></div></body></html>

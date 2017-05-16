@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Rundeck-Plugin-Classnames: org.rundeck.plugins.notification.JiraNotifi
+ cation
+Rundeck-Plugin-File-Version: 1.0.0
+Rundeck-Plugin-Version: 1.1
+Rundeck-Plugin-Libs: lib/jira-client-0.3.jar lib/httpclient-4.2.5.jar 
+ lib/json-lib-2.4-jdk15.jar lib/httpcore-4.2.4.jar lib/commons-logging
+ -1.1.1.jar lib/commons-codec-1.6.jar lib/commons-beanutils-1.8.0.jar 
+ lib/commons-collections-3.2.1.jar lib/commons-lang-2.5.jar lib/ezmorp
+ h-1.0.6.jar
+Rundeck-Plugin-Archive: true
+

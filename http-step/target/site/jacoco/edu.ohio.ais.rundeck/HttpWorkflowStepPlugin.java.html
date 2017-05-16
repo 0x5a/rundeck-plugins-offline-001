@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HttpWorkflowStepPlugin.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">edu.ohio.ais.rundeck:rundeck-http-plugin</a> &gt; <a href="index.source.html" class="el_package">edu.ohio.ais.rundeck</a> &gt; <span class="el_source">HttpWorkflowStepPlugin.java</span></div><h1>HttpWorkflowStepPlugin.java</h1><pre class="source lang-java linenums">package edu.ohio.ais.rundeck;
+
+import com.dtolabs.rundeck.core.dispatcher.DataContextUtils;
+import com.dtolabs.rundeck.core.execution.workflow.steps.FailureReason;
+import com.dtolabs.rundeck.core.execution.workflow.steps.StepException;
+import com.dtolabs.rundeck.core.execution.workflow.steps.StepFailureReason;
+import com.dtolabs.rundeck.core.plugins.Plugin;
+import com.dtolabs.rundeck.core.plugins.configuration.Describable;
+import com.dtolabs.rundeck.core.plugins.configuration.Description;
+import com.dtolabs.rundeck.core.plugins.configuration.StringRenderingConstants;
+import com.dtolabs.rundeck.core.storage.ResourceMeta;
+import com.dtolabs.rundeck.plugins.ServiceNameConstants;
+import com.dtolabs.rundeck.plugins.step.PluginStepContext;
+import com.dtolabs.rundeck.plugins.step.StepPlugin;
+import com.dtolabs.rundeck.plugins.util.DescriptionBuilder;
+import com.dtolabs.rundeck.plugins.util.PropertyBuilder;
+import com.esotericsoftware.yamlbeans.YamlReader;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParser;
+import edu.ohio.ais.rundeck.util.OAuthClient;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.util.EntityUtils;
+
+import java.io.*;
+import java.security.GeneralSecurityException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import com.google.gson.Gson;
+import org.dom4j.DocumentHelper;
+import org.dom4j.io.OutputFormat;
+import org.dom4j.io.XMLWriter;
+
+
+/**
+ * Main implementation of the plugin. This will handle fetching
+ * tokens when they're expired and sending the appropriate request.
+ */
+@Plugin(name = HttpWorkflowStepPlugin.SERVICE_PROVIDER_NAME, service = ServiceNameConstants.WorkflowStep)
+<span class="fc" id="L55">public class HttpWorkflowStepPlugin implements StepPlugin, Describable {</span>
+<span class="fc" id="L56">    private static final Log log = LogFactory.getLog(HttpWorkflowStepPlugin.class);</span>
+
+    /**
+     * Maximum number of attempts with which to try the request.
+     */
+<span class="fc" id="L61">    private static final Integer MAX_ATTEMPTS = 5;</span>
+
+    /**
+     * Default request timeout for execution. This only times out the
+     * request for the URL, not OAuth authentication.
+     */
+<span class="fc" id="L67">    private static final Integer DEFAULT_TIMEOUT = 30*1000;</span>
+
+    public static final String SERVICE_PROVIDER_NAME = &quot;edu.ohio.ais.rundeck.HttpWorkflowStepPlugin&quot;;
+<span class="fc" id="L70">    public static final String[] HTTP_METHODS = {&quot;GET&quot;, &quot;POST&quot;, &quot;PUT&quot;, &quot;PATCH&quot;, &quot;DELETE&quot;, &quot;HEAD&quot;, &quot;OPTIONS&quot;};</span>
+    public static final String AUTH_NONE = &quot;None&quot;;
+    public static final String AUTH_BASIC = &quot;Basic&quot;;
+    public static final String AUTH_OAUTH2 = &quot;OAuth 2.0&quot;;
+    public static final String XML_FORMAT = &quot;xml&quot;;
+    public static final String JSON_FORMAT = &quot;json&quot;;
+
+    /**
+     * Synchronized map of all existing OAuth clients. This is indexed by
+     * the Client ID and the token URL so that we can store and re-use access tokens.
+     */
+<span class="fc" id="L81">    final Map&lt;String, OAuthClient&gt; oauthClients = Collections.synchronizedMap(new HashMap&lt;String, OAuthClient&gt;());</span>
+
+<span class="pc" id="L83">    private enum Reason implements FailureReason {</span>
+<span class="fc" id="L84">        OAuthFailure,   // Failure from the OAuth protocol</span>
+<span class="fc" id="L85">        HTTPFailure     // Any HTTP related failures.</span>
+    }
+
+    /**
+     * Setup our plugin description, including all of the various configurable
+     * options.
+     *
+     * @see &lt;a href=&quot;http://rundeck.org/docs/developer/plugin-development.html#plugin-descriptions&quot;&gt;Plugin Descriptions&lt;/a&gt;
+     *
+     * @return The plugin description
+     */
+    @Override
+    public Description getDescription() {
+<span class="fc" id="L98">        return DescriptionBuilder.builder()</span>
+<span class="fc" id="L99">                .name(SERVICE_PROVIDER_NAME)</span>
+<span class="fc" id="L100">                .title(&quot;HTTP Request Step&quot;)</span>
+<span class="fc" id="L101">                .description(&quot;Performs an HTTP request with or without authentication&quot;)</span>
+<span class="fc" id="L102">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L103">                    .string(&quot;remoteUrl&quot;)</span>
+<span class="fc" id="L104">                    .title(&quot;Remote URL&quot;)</span>
+<span class="fc" id="L105">                    .description(&quot;HTTP URL to which to make the request.&quot;)</span>
+<span class="fc" id="L106">                    .required(true)</span>
+<span class="fc" id="L107">                    .build())</span>
+<span class="fc" id="L108">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L109">                    .select(&quot;method&quot;)</span>
+<span class="fc" id="L110">                    .title(&quot;HTTP Method&quot;)</span>
+<span class="fc" id="L111">                    .description(&quot;HTTP method used to make the request.&quot;)</span>
+<span class="fc" id="L112">                    .required(true)</span>
+<span class="fc" id="L113">                    .defaultValue(&quot;GET&quot;)</span>
+<span class="fc" id="L114">                    .values(HTTP_METHODS)</span>
+<span class="fc" id="L115">                    .build())</span>
+<span class="fc" id="L116">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L117">                        .string(&quot;headers&quot;)</span>
+<span class="fc" id="L118">                        .title(&quot;Headers&quot;)</span>
+<span class="fc" id="L119">                        .description(&quot;Add headers in json or yaml format.&quot;)</span>
+<span class="fc" id="L120">                        .renderingAsTextarea()</span>
+<span class="fc" id="L121">                        .build())</span>
+<span class="fc" id="L122">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L123">                        .string(&quot;body&quot;)</span>
+<span class="fc" id="L124">                        .title(&quot;Body&quot;)</span>
+<span class="fc" id="L125">                        .description(&quot;Add Body.&quot;)</span>
+<span class="fc" id="L126">                        .renderingAsTextarea()</span>
+<span class="fc" id="L127">                        .build())</span>
+<span class="fc" id="L128">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L129">                    .integer(&quot;timeout&quot;)</span>
+<span class="fc" id="L130">                    .title(&quot;Request Timeout&quot;)</span>
+<span class="fc" id="L131">                    .description(&quot;How long to wait for a request to complete before failing.&quot;)</span>
+<span class="fc" id="L132">                    .defaultValue(DEFAULT_TIMEOUT.toString())</span>
+<span class="fc" id="L133">                    .build())</span>
+<span class="fc" id="L134">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L135">                    .booleanType(&quot;sslVerify&quot;)</span>
+<span class="fc" id="L136">                    .title(&quot;Validate SSL Certificates&quot;)</span>
+<span class="fc" id="L137">                    .description(&quot;Validate that SSL certificates are trusted, match the hostname, are not expited, etc.&quot;)</span>
+<span class="fc" id="L138">                    .defaultValue(&quot;true&quot;)</span>
+<span class="fc" id="L139">                    .build())</span>
+<span class="fc" id="L140">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L141">                        .select(&quot;authentication&quot;)</span>
+<span class="fc" id="L142">                        .title(&quot;Authentication&quot;)</span>
+<span class="fc" id="L143">                        .description(&quot;Authentication mechanism to use.&quot;)</span>
+<span class="fc" id="L144">                        .required(false)</span>
+<span class="fc" id="L145">                        .defaultValue(AUTH_NONE)</span>
+<span class="fc" id="L146">                        .values(AUTH_NONE, AUTH_BASIC, AUTH_OAUTH2)</span>
+<span class="fc" id="L147">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Authentication&quot;)</span>
+<span class="fc" id="L148">                        .build())</span>
+<span class="fc" id="L149">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L150">                    .string(&quot;username&quot;)</span>
+<span class="fc" id="L151">                    .title(&quot;Username/Client ID&quot;)</span>
+<span class="fc" id="L152">                    .description(&quot;Username or Client ID to use for authentication.&quot;)</span>
+<span class="fc" id="L153">                    .required(false)</span>
+<span class="fc" id="L154">                    .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Authentication&quot;)</span>
+<span class="fc" id="L155">                    .build())</span>
+<span class="fc" id="L156">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L157">                    .string(&quot;password&quot;)</span>
+<span class="fc" id="L158">                    .title(&quot;Password/Client Secret&quot;)</span>
+<span class="fc" id="L159">                    .description(&quot;Password or Client Secret to use for authentication.&quot;)</span>
+<span class="fc" id="L160">                    .required(false)</span>
+<span class="fc" id="L161">                    .renderingOption(StringRenderingConstants.SELECTION_ACCESSOR_KEY,</span>
+                            StringRenderingConstants.SelectionAccessor.STORAGE_PATH)
+<span class="fc" id="L163">                    .renderingOption(StringRenderingConstants.STORAGE_PATH_ROOT_KEY, &quot;keys&quot;)</span>
+<span class="fc" id="L164">                    .renderingOption(StringRenderingConstants.STORAGE_FILE_META_FILTER_KEY, &quot;Rundeck-data-type=password&quot;)</span>
+<span class="fc" id="L165">                    .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Authentication&quot;)</span>
+<span class="fc" id="L166">                    .build())</span>
+<span class="fc" id="L167">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L168">                    .string(&quot;oauthTokenEndpoint&quot;)</span>
+<span class="fc" id="L169">                    .title(&quot;OAuth Token URL&quot;)</span>
+<span class="fc" id="L170">                    .description(&quot;OAuth 2.0 Token Endpoint URL at which to obtain tokens.&quot;)</span>
+<span class="fc" id="L171">                    .required(false)</span>
+<span class="fc" id="L172">                    .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Authentication&quot;)</span>
+<span class="fc" id="L173">                    .build())</span>
+<span class="fc" id="L174">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L175">                    .string(&quot;oauthValidateEndpoint&quot;)</span>
+<span class="fc" id="L176">                    .title(&quot;OAuth Validate URL&quot;)</span>
+<span class="fc" id="L177">                    .description(&quot;OAuth 2.0 Validate Endpoint URL at which to obtain validate token responses.&quot;)</span>
+<span class="fc" id="L178">                    .required(false)</span>
+<span class="fc" id="L179">                    .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Authentication&quot;)</span>
+<span class="fc" id="L180">                    .build())</span>
+<span class="fc" id="L181">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L182">                        .booleanType(&quot;checkResponseCode&quot;)</span>
+<span class="fc" id="L183">                        .title(&quot;Check Response Code?&quot;)</span>
+<span class="fc" id="L184">                        .description(&quot;Set if you want to check response code.&quot;)</span>
+<span class="fc" id="L185">                        .defaultValue(&quot;false&quot;)</span>
+<span class="fc" id="L186">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Check Response&quot;)</span>
+<span class="fc" id="L187">                        .build())</span>
+<span class="fc" id="L188">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L189">                        .string(&quot;responseCode&quot;)</span>
+<span class="fc" id="L190">                        .title(&quot;Response Code&quot;)</span>
+<span class="fc" id="L191">                        .description(&quot;Response Code expected, the step will fail if the response code is different.&quot;)</span>
+<span class="fc" id="L192">                        .required(false)</span>
+<span class="fc" id="L193">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Check Response&quot;)</span>
+<span class="fc" id="L194">                        .build())</span>
+<span class="fc" id="L195">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L196">                        .booleanType(&quot;printResponse&quot;)</span>
+<span class="fc" id="L197">                        .title(&quot;Print Response?&quot;)</span>
+<span class="fc" id="L198">                        .description(&quot;Set if the response needs to be printed.&quot;)</span>
+<span class="fc" id="L199">                        .defaultValue(&quot;false&quot;)</span>
+<span class="fc" id="L200">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Print&quot;)</span>
+<span class="fc" id="L201">                        .build())</span>
+<span class="fc" id="L202">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L203">                        .booleanType(&quot;printResponseToFile&quot;)</span>
+<span class="fc" id="L204">                        .title(&quot;Print Response to File?&quot;)</span>
+<span class="fc" id="L205">                        .description(&quot;Set if you want to print the response content to a file.&quot;)</span>
+<span class="fc" id="L206">                        .defaultValue(&quot;false&quot;)</span>
+<span class="fc" id="L207">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Print&quot;)</span>
+<span class="fc" id="L208">                        .build())</span>
+<span class="fc" id="L209">                .property(PropertyBuilder.builder()</span>
+<span class="fc" id="L210">                        .string(&quot;file&quot;)</span>
+<span class="fc" id="L211">                        .title(&quot;File Path&quot;)</span>
+<span class="fc" id="L212">                        .description(&quot;File path where you will write the response.&quot;)</span>
+<span class="fc" id="L213">                        .required(false)</span>
+<span class="fc" id="L214">                        .renderingOption(StringRenderingConstants.GROUP_NAME,&quot;Print&quot;)</span>
+<span class="fc" id="L215">                        .build())</span>
+<span class="fc" id="L216">                .build();</span>
+    }
+
+    protected HttpClient getHttpClient(Map&lt;String, Object&gt; options) throws GeneralSecurityException {
+<span class="fc" id="L220">        HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();</span>
+
+<span class="fc" id="L222">        httpClientBuilder.disableAuthCaching();</span>
+<span class="fc" id="L223">        httpClientBuilder.disableAutomaticRetries();</span>
+
+<span class="pc bpc" id="L225" title="3 of 4 branches missed.">        if(options.containsKey(&quot;sslVerify&quot;) &amp;&amp; !Boolean.parseBoolean(options.get(&quot;sslVerify&quot;).toString())) {</span>
+<span class="nc" id="L226">            log.debug(&quot;Disabling all SSL certificate verification.&quot;);</span>
+<span class="nc" id="L227">            SSLContextBuilder sslContextBuilder = new SSLContextBuilder();</span>
+<span class="nc" id="L228">            sslContextBuilder.loadTrustMaterial(null, new TrustStrategy() {</span>
+                @Override
+                public boolean isTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+<span class="nc" id="L231">                    return true;</span>
+                }
+            });
+
+<span class="nc" id="L235">            httpClientBuilder.setSSLHostnameVerifier(new NoopHostnameVerifier());</span>
+<span class="nc" id="L236">            httpClientBuilder.setSSLContext(sslContextBuilder.build());</span>
+        }
+
+<span class="fc" id="L239">        return httpClientBuilder.build();</span>
+    }
+
+    /**
+     * Execute a single request. This will call itself if it needs to refresh an OAuth token.
+     *
+     * @param options All of the options provided to the plugin execution
+     * @param request The HTTP request we're supposed to execute
+     * @param attempts The attempt number
+     * @throws StepException Thrown when any error occurs
+     */
+    protected void doRequest(Map&lt;String, Object&gt; options, HttpUriRequest request, Integer attempts) throws StepException {
+<span class="pc bpc" id="L251" title="1 of 2 branches missed.">        if(attempts &gt; MAX_ATTEMPTS) {</span>
+<span class="nc" id="L252">            throw new StepException(&quot;Unable to complete request after maximum number of attempts.&quot;, StepFailureReason.IOFailure);</span>
+        }
+        try {
+<span class="fc" id="L255">            HttpResponse response = this.getHttpClient(options).execute(request);</span>
+
+            //print the response content
+<span class="pc bpc" id="L258" title="3 of 4 branches missed.">            if(options.containsKey(&quot;printResponse&quot;) &amp;&amp; Boolean.parseBoolean(options.get(&quot;printResponse&quot;).toString()) ||</span>
+<span class="pc bpc" id="L259" title="3 of 4 branches missed.">                    options.containsKey(&quot;printResponseToFile&quot;) &amp;&amp; Boolean.parseBoolean(options.get(&quot;printResponseToFile&quot;).toString())) {</span>
+
+<span class="nc" id="L261">                String output = this.prettyPrint(response);</span>
+
+<span class="nc bnc" id="L263" title="All 2 branches missed.">                if(Boolean.parseBoolean(options.get(&quot;printResponse&quot;).toString())) {</span>
+                    //print response
+<span class="nc" id="L265">                    System.out.println(output);</span>
+                }
+
+<span class="nc bnc" id="L268" title="All 2 branches missed.">                if(Boolean.parseBoolean(options.get(&quot;printResponseToFile&quot;).toString())) {</span>
+
+<span class="nc" id="L270">                    File file = new File(options.get(&quot;file&quot;).toString());</span>
+<span class="nc" id="L271">                    BufferedWriter writer = new BufferedWriter(new FileWriter(file));</span>
+<span class="nc" id="L272">                    writer.write (output);</span>
+
+                    //Close writer
+<span class="nc" id="L275">                    writer.close();</span>
+                }
+
+            }
+
+                //check response status
+<span class="pc bpc" id="L281" title="3 of 4 branches missed.">            if(options.containsKey(&quot;checkResponseCode&quot;) &amp;&amp; Boolean.parseBoolean(options.get(&quot;checkResponseCode&quot;).toString())) {</span>
+
+<span class="nc bnc" id="L283" title="All 2 branches missed.">                if(options.containsKey(&quot;responseCode&quot;)){</span>
+<span class="nc" id="L284">                    int responseCode = Integer.valueOf( (String) options.get(&quot;responseCode&quot;));</span>
+
+<span class="nc bnc" id="L286" title="All 2 branches missed.">                    if(response.getStatusLine().getStatusCode()!=responseCode){</span>
+<span class="nc" id="L287">                        String message = &quot;Error, the expected response code didn't fix, the value expected was &quot; + responseCode + &quot; and the response code was &quot; +  response.getStatusLine().getStatusCode();</span>
+<span class="nc" id="L288">                        throw new StepException(message, Reason.HTTPFailure);</span>
+                    }
+
+                }
+
+            }
+
+                // Sometimes we may need to refresh our OAuth token.
+<span class="fc bfc" id="L296" title="All 2 branches covered.">            if(response.getStatusLine().getStatusCode() == OAuthClient.STATUS_AUTHORIZATION_REQUIRED) {</span>
+<span class="fc" id="L297">                log.debug(&quot;Warning: Got authorization required exception from &quot; + request.getURI());</span>
+
+                // But only if we actually use OAuth for authentication
+<span class="fc bfc" id="L300" title="All 2 branches covered.">                if(options.containsKey(&quot;authentication&quot;)) {</span>
+<span class="fc bfc" id="L301" title="All 2 branches covered.">                    if(options.get(&quot;authentication&quot;).toString().equals(AUTH_BASIC)) {</span>
+<span class="fc" id="L302">                        throw new StepException(&quot;Remote URL requires authentication but does not support BASIC.&quot;, StepFailureReason.ConfigurationFailure);</span>
+<span class="pc bpc" id="L303" title="1 of 2 branches missed.">                    } else if(options.get(&quot;authentication&quot;).toString().equals(AUTH_OAUTH2)) {</span>
+<span class="fc" id="L304">                        log.debug(&quot;Attempting to refresh OAuth token and try again...&quot;);</span>
+                        String accessToken;
+
+                        // Another thread might be trying to do the same thing.
+<span class="fc" id="L308">                        synchronized(this.oauthClients) {</span>
+<span class="fc" id="L309">                            String clientKey = options.get(&quot;username&quot;).toString() + &quot;@&quot; + options.get(&quot;oauthTokenEndpoint&quot;).toString();</span>
+
+<span class="fc" id="L311">                            OAuthClient client = this.oauthClients.get(clientKey);</span>
+<span class="fc" id="L312">                            client.invalidateAccessToken();</span>
+
+                            try {
+<span class="fc" id="L315">                                accessToken = client.getAccessToken();</span>
+<span class="nc" id="L316">                            } catch(Exception e) {</span>
+<span class="nc" id="L317">                                StepException se = new StepException(&quot;Error refreshing OAuth Access Token: &quot; + e.getMessage(),</span>
+                                        Reason.OAuthFailure);
+<span class="nc" id="L319">                                se.initCause(e);</span>
+<span class="nc" id="L320">                                throw se;</span>
+<span class="fc" id="L321">                            }</span>
+
+                            // Don't forget to update the client map in case something changed
+<span class="fc" id="L324">                            this.oauthClients.put(clientKey, client);</span>
+<span class="pc" id="L325">                        }</span>
+
+                        // Build a new request and call `doRequest` again.
+<span class="fc" id="L328">                        request.setHeader(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken);</span>
+
+<span class="fc" id="L330">                        log.trace(&quot;Authentication header set to Bearer &quot; + accessToken);</span>
+
+<span class="fc" id="L332">                        this.doRequest(options, request, attempts + 1);</span>
+<span class="fc" id="L333">                    } else {</span>
+<span class="nc" id="L334">                        throw new StepException(&quot;Remote URL requires authentication.&quot;, StepFailureReason.ConfigurationFailure);</span>
+                    }
+                } else {
+<span class="fc" id="L337">                    throw new StepException(&quot;Remote URL requires authentication.&quot;, StepFailureReason.ConfigurationFailure);</span>
+                }
+<span class="fc bfc" id="L339" title="All 2 branches covered.">            } else if(response.getStatusLine().getStatusCode() &gt;= 400) {</span>
+<span class="fc" id="L340">                String message = &quot;Error when sending request&quot;;</span>
+
+<span class="pc bpc" id="L342" title="1 of 2 branches missed.">                if(response.getStatusLine().getReasonPhrase().length() &gt; 0) {</span>
+<span class="fc" id="L343">                    message += &quot;: &quot; + response.getStatusLine().getReasonPhrase();</span>
+                } else {
+<span class="nc" id="L345">                    message += &quot;: &quot; + Integer.toString(response.getStatusLine().getStatusCode()) + &quot; Error&quot;;</span>
+                }
+
+<span class="fc" id="L348">                String body = EntityUtils.toString(response.getEntity());</span>
+<span class="pc bpc" id="L349" title="1 of 2 branches missed.">                if(body.length() &gt; 0) {</span>
+<span class="nc" id="L350">                    message += &quot;: &quot; + body;</span>
+                }
+
+<span class="fc" id="L353">                throw new StepException(message, Reason.HTTPFailure);</span>
+            }
+<span class="fc" id="L355">        } catch (IOException e) {</span>
+<span class="fc" id="L356">            StepException ese = new StepException(&quot;Error when sending request: &quot; + e.getMessage(), Reason.HTTPFailure);</span>
+<span class="fc" id="L357">            ese.initCause(e);</span>
+<span class="fc" id="L358">            throw ese;</span>
+<span class="nc" id="L359">        } catch (GeneralSecurityException se) {</span>
+<span class="nc" id="L360">            StepException sse = new StepException(&quot;Error when sending request: &quot; + se.getMessage(), Reason.HTTPFailure);</span>
+<span class="nc" id="L361">            se.initCause(se);</span>
+<span class="nc" id="L362">            throw sse;</span>
+<span class="fc" id="L363">        }</span>
+<span class="fc" id="L364">    }</span>
+
+    @Override
+    public void executeStep(PluginStepContext pluginStepContext, Map&lt;String, Object&gt; options) throws StepException {
+<span class="fc" id="L368">        String authHeader = null;</span>
+
+        // Parse out the options
+<span class="fc bfc" id="L371" title="All 2 branches covered.">        String remoteUrl = options.containsKey(&quot;remoteUrl&quot;) ? options.get(&quot;remoteUrl&quot;).toString() : null;</span>
+<span class="fc bfc" id="L372" title="All 2 branches covered.">        String method = options.containsKey(&quot;method&quot;) ? options.get(&quot;method&quot;).toString() : null;</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">        String authentication = options.containsKey(&quot;authentication&quot;) ? options.get(&quot;authentication&quot;).toString() : AUTH_NONE;</span>
+<span class="fc bfc" id="L374" title="All 2 branches covered.">        Integer timeout = options.containsKey(&quot;timeout&quot;) ? Integer.parseInt(options.get(&quot;timeout&quot;).toString()) : DEFAULT_TIMEOUT;</span>
+<span class="pc bpc" id="L375" title="1 of 2 branches missed.">        String headers = options.containsKey(&quot;headers&quot;) ? options.get(&quot;headers&quot;).toString() : null;</span>
+<span class="pc bpc" id="L376" title="1 of 2 branches missed.">        String body = options.containsKey(&quot;body&quot;) ? options.get(&quot;body&quot;).toString() : null;</span>
+
+<span class="pc bpc" id="L378" title="1 of 4 branches missed.">        if(remoteUrl == null || method == null) {</span>
+<span class="fc" id="L379">            throw new StepException(&quot;Remote URL and Method are required.&quot;, StepFailureReason.ConfigurationFailure);</span>
+        }
+
+        //Use options in remote URL
+<span class="pc bpc" id="L383" title="2 of 4 branches missed.">        if (null != remoteUrl &amp;&amp; remoteUrl.contains(&quot;${&quot;)) {</span>
+<span class="nc" id="L384">            remoteUrl = DataContextUtils.replaceDataReferences(remoteUrl, pluginStepContext.getDataContext());</span>
+        }
+
+        //moving the password to the key storage
+<span class="fc" id="L388">        String password=null;</span>
+
+<span class="fc bfc" id="L390" title="All 2 branches covered.">        if(options.containsKey(&quot;password&quot;) ){</span>
+<span class="pc bpc" id="L391" title="1 of 2 branches missed.">            String passwordRaw = options.containsKey(&quot;password&quot;) ? options.get(&quot;password&quot;).toString() : null;</span>
+
+            //to avid the test error add a try-catch
+            //if it didn't find the key path, it will use the password directly
+            try {
+<span class="nc" id="L396">                ResourceMeta contents = pluginStepContext.getExecutionContext().getStorageTree().getResource(passwordRaw).getContents();</span>
+
+<span class="nc" id="L398">                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();</span>
+
+<span class="nc" id="L400">                contents.writeContent(byteArrayOutputStream);</span>
+
+<span class="nc" id="L402">                password = new String(byteArrayOutputStream.toByteArray());</span>
+<span class="fc" id="L403">            } catch (Exception e) {</span>
+<span class="fc" id="L404">                password=null;</span>
+<span class="nc" id="L405">            }</span>
+
+<span class="pc bpc" id="L407" title="1 of 2 branches missed.">            if(password==null){</span>
+<span class="fc" id="L408">                password=passwordRaw;</span>
+            }
+
+        }
+
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        if(authentication.equals(AUTH_BASIC)) {</span>
+            // Setup the authentication header for BASIC
+<span class="fc bfc" id="L415" title="All 2 branches covered.">            String username = options.containsKey(&quot;username&quot;) ? options.get(&quot;username&quot;).toString() : null;</span>
+
+<span class="pc bpc" id="L417" title="1 of 4 branches missed.">            if(username == null || password == null) {</span>
+<span class="fc" id="L418">                throw new StepException(&quot;Username and password not provided for BASIC Authentication&quot;,</span>
+                        StepFailureReason.ConfigurationFailure);
+            }
+
+<span class="fc" id="L422">            authHeader = username + &quot;:&quot; + password;</span>
+
+            //As per RFC2617 the Basic Authentication standard has to send the credentials Base64 encoded.
+<span class="fc" id="L425">            authHeader = &quot;Basic &quot; + com.dtolabs.rundeck.core.utils.Base64.encode(authHeader);</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">        } else if (authentication.equals(AUTH_OAUTH2)) {</span>
+            // Get an OAuth token and setup the auth header for OAuth
+<span class="fc bfc" id="L428" title="All 2 branches covered.">            String tokenEndpoint = options.containsKey(&quot;oauthTokenEndpoint&quot;) ? options.get(&quot;oauthTokenEndpoint&quot;).toString() : null;</span>
+<span class="fc bfc" id="L429" title="All 2 branches covered.">            String validateEndpoint = options.containsKey(&quot;oauthValidateEndpoint&quot;) ? options.get(&quot;oauthValidateEndpoint&quot;).toString() : null;</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">            String clientId = options.containsKey(&quot;username&quot;) ? options.get(&quot;username&quot;).toString() : null;</span>
+<span class="fc" id="L431">            String clientSecret = password;</span>
+
+
+<span class="fc bfc" id="L434" title="All 2 branches covered.">            if(tokenEndpoint == null) {</span>
+<span class="fc" id="L435">                throw new StepException(&quot;Token endpoint not provided for OAuth 2.0 Authentication.&quot;,</span>
+                        StepFailureReason.ConfigurationFailure);
+            }
+
+<span class="fc" id="L439">            String clientKey = clientId + &quot;@&quot; + tokenEndpoint;</span>
+            String accessToken;
+
+            // Another thread may be trying to do the same thing.
+<span class="fc" id="L443">            synchronized(this.oauthClients) {</span>
+                OAuthClient client;
+
+<span class="fc bfc" id="L446" title="All 2 branches covered.">                if(this.oauthClients.containsKey(clientKey)) {</span>
+                    // Update the existing client with our options if it exists.
+                    // We do this so that changes to configuration will always
+                    // update clients on next run.
+<span class="fc" id="L450">                    log.trace(&quot;Found existing OAuth client with key &quot; + clientKey);</span>
+<span class="fc" id="L451">                    client = this.oauthClients.get(clientKey);</span>
+<span class="fc" id="L452">                    client.setCredentials(clientId, clientSecret);</span>
+<span class="fc" id="L453">                    client.setValidateEndpoint(validateEndpoint);</span>
+                } else {
+                    // Create a brand new client
+<span class="fc" id="L456">                    log.trace(&quot;Creating new OAuth client with key &quot; + clientKey);</span>
+<span class="fc" id="L457">                    client = new OAuthClient(OAuthClient.GrantType.CLIENT_CREDENTIALS);</span>
+<span class="fc" id="L458">                    client.setCredentials(clientId, clientSecret);</span>
+<span class="fc" id="L459">                    client.setTokenEndpoint(tokenEndpoint);</span>
+<span class="fc" id="L460">                    client.setValidateEndpoint(validateEndpoint);</span>
+                }
+
+                // Grab the access token
+                try {
+<span class="fc" id="L465">                    log.trace(&quot;Attempting to fetch access token...&quot;);</span>
+<span class="fc" id="L466">                    accessToken = client.getAccessToken();</span>
+<span class="fc" id="L467">                } catch(Exception ex) {</span>
+<span class="fc" id="L468">                    StepException se = new StepException(&quot;Error obtaining OAuth Access Token: &quot; + ex.getMessage(),</span>
+                            Reason.OAuthFailure);
+<span class="fc" id="L470">                    se.initCause(ex);</span>
+<span class="fc" id="L471">                    throw se;</span>
+<span class="fc" id="L472">                }</span>
+
+<span class="fc" id="L474">                this.oauthClients.put(clientKey, client);</span>
+<span class="fc" id="L475">            }</span>
+
+<span class="fc" id="L477">            authHeader = &quot;Bearer &quot; + accessToken;</span>
+        }
+
+        // Setup the request and process it.
+<span class="fc" id="L481">        RequestBuilder request = RequestBuilder.create(method)</span>
+<span class="fc" id="L482">                .setUri(remoteUrl)</span>
+<span class="fc" id="L483">                .setConfig(RequestConfig.custom()</span>
+<span class="fc" id="L484">                        .setConnectionRequestTimeout(timeout)</span>
+<span class="fc" id="L485">                        .setConnectTimeout(timeout)</span>
+<span class="fc" id="L486">                        .setSocketTimeout(timeout)</span>
+<span class="fc" id="L487">                        .build());</span>
+
+<span class="fc" id="L489">        log.debug(&quot;Creating HTTP &quot; + request.getMethod() + &quot; request to &quot; + request.getUri());</span>
+
+<span class="fc bfc" id="L491" title="All 2 branches covered.">        if(authHeader != null) {</span>
+<span class="fc" id="L492">            log.trace(&quot;Authentication header set to &quot; + authHeader);</span>
+<span class="fc" id="L493">            request.setHeader(&quot;Authorization&quot;, authHeader);</span>
+        }
+
+        //add custom headers, it could be json or yml
+<span class="pc bpc" id="L497" title="1 of 2 branches missed.">        if(headers !=null){</span>
+
+            //checking json
+<span class="nc" id="L500">            Gson gson = new Gson();</span>
+<span class="nc" id="L501">            Map&lt;String,String&gt; map = new HashMap&lt;&gt;();</span>
+
+            try {
+<span class="nc" id="L504">                map = (Map&lt;String,String&gt;) gson.fromJson(headers, map.getClass());</span>
+<span class="nc" id="L505">            } catch (Exception e) {</span>
+<span class="nc" id="L506">                map = null;</span>
+<span class="nc" id="L507">            }</span>
+
+            //checking yml
+<span class="nc bnc" id="L510" title="All 2 branches missed.">            if(map == null) {</span>
+<span class="nc" id="L511">                map = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L512">                Object object = null;</span>
+                try {
+<span class="nc" id="L514">                    YamlReader reader = new YamlReader(headers);</span>
+<span class="nc" id="L515">                    object = reader.read();</span>
+<span class="nc" id="L516">                    map = (Map&lt;String,String&gt;) object;</span>
+<span class="nc" id="L517">                } catch (Exception e) {</span>
+<span class="nc" id="L518">                    map = null;</span>
+<span class="nc" id="L519">                }</span>
+            }
+
+<span class="nc bnc" id="L522" title="All 2 branches missed.">            if(map == null){</span>
+<span class="nc" id="L523">                System.err.print(&quot;Error parsing the headers&quot;);</span>
+            }else{
+<span class="nc bnc" id="L525" title="All 2 branches missed.">                for (Map.Entry&lt;String, String&gt; entry : map.entrySet()) {</span>
+<span class="nc" id="L526">                    String key = entry.getKey();</span>
+<span class="nc" id="L527">                    String value = entry.getValue();</span>
+
+<span class="nc" id="L529">                    request.setHeader(key, value);</span>
+<span class="nc" id="L530">                }</span>
+            }
+        }
+
+        //send body
+<span class="pc bpc" id="L535" title="1 of 2 branches missed.">        if(body !=null){</span>
+<span class="nc" id="L536">            HttpEntity entity = null;</span>
+            try {
+<span class="nc" id="L538">                entity = new ByteArrayEntity(body.getBytes(&quot;UTF-8&quot;));</span>
+<span class="nc" id="L539">            } catch (UnsupportedEncodingException e) {</span>
+<span class="nc" id="L540">                e.printStackTrace();</span>
+<span class="nc" id="L541">            }</span>
+<span class="nc" id="L542">            request.setEntity(entity);</span>
+        }
+
+<span class="fc" id="L545">        this.doRequest(options, request.build(), 1);</span>
+<span class="fc" id="L546">    }</span>
+
+
+    private StringBuffer getPageContent(HttpResponse response) {
+
+<span class="nc" id="L551">        BufferedReader rd = null;</span>
+        try {
+<span class="nc" id="L553">            rd = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));</span>
+<span class="nc" id="L554">        } catch (IOException e) {</span>
+<span class="nc" id="L555">            e.printStackTrace();</span>
+<span class="nc" id="L556">        }</span>
+
+<span class="nc" id="L558">        StringBuffer result = new StringBuffer();</span>
+
+<span class="nc" id="L560">        String line = &quot;&quot;;</span>
+        try {
+<span class="nc bnc" id="L562" title="All 2 branches missed.">            while ((line = rd.readLine()) != null) {</span>
+<span class="nc" id="L563">                result.append(line);</span>
+            }
+<span class="nc" id="L565">        } catch (IOException e) {</span>
+<span class="nc" id="L566">            e.printStackTrace();</span>
+<span class="nc" id="L567">        }</span>
+
+<span class="nc" id="L569">        return result;</span>
+    }
+
+    //print response
+    public String prettyPrint(HttpResponse response){
+
+<span class="nc" id="L575">        HttpEntity entity = response.getEntity();</span>
+        ContentType contentType;
+<span class="nc" id="L577">        String mimeType=&quot;&quot;;</span>
+<span class="nc bnc" id="L578" title="All 2 branches missed.">        if (entity != null) {</span>
+<span class="nc" id="L579">            contentType = ContentType.get(entity);</span>
+
+<span class="nc bnc" id="L581" title="All 2 branches missed.">            if(contentType!=null) {</span>
+<span class="nc" id="L582">                mimeType = contentType.getMimeType();</span>
+            }
+        }
+
+<span class="nc" id="L586">        String outputWithoutFormat=getPageContent(response).toString();</span>
+
+<span class="nc" id="L588">        String output = &quot;&quot;;</span>
+
+<span class="nc bnc" id="L590" title="All 4 branches missed.">        if(mimeType.contains(JSON_FORMAT) || mimeType.contains(XML_FORMAT)) {</span>
+
+<span class="nc bnc" id="L592" title="All 2 branches missed.">            if (mimeType.contains(JSON_FORMAT)) {</span>
+<span class="nc" id="L593">                output = new GsonBuilder().setPrettyPrinting().create().toJson(new JsonParser().parse(outputWithoutFormat));</span>
+            }
+
+<span class="nc bnc" id="L596" title="All 2 branches missed.">            if (mimeType.contains(XML_FORMAT)) {</span>
+                StringWriter sw;
+
+                try {
+<span class="nc" id="L600">                    final OutputFormat format = OutputFormat.createPrettyPrint();</span>
+<span class="nc" id="L601">                    final org.dom4j.Document document = DocumentHelper.parseText(outputWithoutFormat);</span>
+<span class="nc" id="L602">                    sw = new StringWriter();</span>
+<span class="nc" id="L603">                    final XMLWriter writer = new XMLWriter(sw, format);</span>
+<span class="nc" id="L604">                    writer.write(document);</span>
+                }
+<span class="nc" id="L606">                catch (Exception e) {</span>
+<span class="nc" id="L607">                    throw new RuntimeException(&quot;Error pretty printing xml:\n&quot; + outputWithoutFormat, e);</span>
+<span class="nc" id="L608">                }</span>
+
+<span class="nc" id="L610">                output = sw.toString();</span>
+<span class="nc" id="L611">            }</span>
+        }else{
+<span class="nc" id="L613">            output=outputWithoutFormat;</span>
+        }
+
+<span class="nc" id="L616">        return output;</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.eclemma.org/jacoco">JaCoCo</a> 0.7.7.201606060606</span></div></body></html>
